@@ -14,9 +14,13 @@ class Model(torch.nn.Module):
         self.sequential = torch.nn.Sequential(*layers)
 
         self.state_value_lin = torch.nn.Linear(widths[-1], 1)
+        self.state_value_lin.weight.data.zero_()
+        self.state_value_lin.bias.data.zero_()
 
         num_actions = size_x * size_y
         self.action_advantage_lin = torch.nn.Linear(widths[-1], num_actions)
+        self.action_advantage_lin.weight.data.zero_()
+        self.action_advantage_lin.bias.data.zero_()
 
     def forward(self, X):
         X = F.one_hot(X.to(torch.long), num_classes=8).to(torch.float32).view(X.shape[0], -1)

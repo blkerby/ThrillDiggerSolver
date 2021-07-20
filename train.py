@@ -152,28 +152,32 @@ def beginner_environment(num_envs):
     return ThrillDiggerEnvironment(num_envs, size_x=5, size_y=4, num_bombs=4, num_rupoors=0)
 
 # num_envs = 1
-num_envs = 2 ** 18
+num_envs = 2 ** 12
 batch_size = 2 ** 12
-ema_beta = 0.98
+ema_beta = 0.9
 env = beginner_environment(num_envs=num_envs)
-model = Model(env.size_x, env.size_y, hidden_widths=[256, 256])
-optimizer = torch.optim.Adam(model.parameters(), lr=0.002, betas=(0.9, 0.999))
+model = Model(env.size_x, env.size_y, hidden_widths=[256])
+optimizer = torch.optim.Adam(model.parameters(), lr=0.001, betas=(0.9, 0.999))
 session = TrainingSession(env, model, optimizer, ema_beta=ema_beta)
 Y = model(env.observed_map)
 
 print(session.model)
 print(session.optimizer)
-self = session
+# self = session
 # temperature = 1.0  # 1e-5
-lr0 = 0.002
-explore_eps = 0.0
+session.env = env
+lr0 = 0.005
+explore_eps0 = 0.0
 action_loss_weight = 0.5
 # temperature = 1000.0
+
+# session.model_ema.beta = 0.9
 
 logging.info("Starting training")
 for i in range(1000):
     temperature = session.rounds * 0.2 + 1e-5
-    optimizer.param_groups[0]['lr'] = lr0 / (session.rounds + 1) ** 0.5
+    optimizer.param_groups[0]['lr'] = lr0 / (session.rounds + 1) ** 0.8
+    explore_eps = explore_eps0 / (1 + session.rounds)
     # observed_map, state_value, action, reward, prob = session.generate_round(
     #     temperature=temperature, explore_eps=explore_eps
     # )
@@ -182,7 +186,7 @@ for i in range(1000):
         temperature=temperature,
         explore_eps=explore_eps,
         action_loss_weight=action_loss_weight,
-        td_lambda=0.0,
+        td_lambda=1.0,
     )
     logging.info("{}: reward={:.3f}, mc_state={:.3f}, mc_action={:.3f}, state={:.4f}, action={:.4f}, p={:.4f}".format(
         session.rounds, mean_reward, mc_state_err, mc_action_err, state_loss, action_loss, prob))
