@@ -78,7 +78,7 @@ class ExponentialAverage:
     Accumulates a simple average of a set of tensors.
     """
     def __init__(self, params, beta):
-        self.shadow_params = [p.clone() for p in params]
+        self.shadow_params = [p.data.clone() for p in params]
         self.stored_params = None
         self.beta = beta
 
@@ -90,7 +90,7 @@ class ExponentialAverage:
         the `optimizer.step()` call.
         """
         for i, param in enumerate(params):
-            self.shadow_params[i] = self.beta * self.stored_params[i] + (1 - self.beta) * param
+            self.shadow_params[i] = self.beta * self.shadow_params[i] + (1 - self.beta) * param.data
 
     def use_averages(self, params):
         for i, param in enumerate(params):
@@ -100,7 +100,7 @@ class ExponentialAverage:
         """
         Save the current parameters for restoring later.
         """
-        self.stored_params = [param.clone() for param in params]
+        self.stored_params = [param.data.clone() for param in params]
 
     def restore(self, params):
         """
@@ -111,7 +111,7 @@ class ExponentialAverage:
         restore the former parameters.
         """
         for i, param in enumerate(params):
-            param.copy_(self.stored_params[i])
+            param.data.copy_(self.stored_params[i])
 
     @contextlib.contextmanager
     def average_parameters(self, params):

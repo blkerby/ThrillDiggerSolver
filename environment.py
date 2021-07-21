@@ -11,7 +11,7 @@ RUPOOR = 6
 BOMB = 7
 
 class ThrillDiggerEnvironment:
-    def __init__(self, num_envs, size_x, size_y, num_bombs, num_rupoors):
+    def __init__(self, num_envs, size_x, size_y, num_bombs, num_rupoors, device):
         self.num_envs = num_envs
         self.size_x = size_x
         self.size_y = size_y
@@ -20,36 +20,42 @@ class ThrillDiggerEnvironment:
         self.num_actions = size_x * size_y
         self.num_rupees = size_x * size_y - num_rupoors - num_bombs
         self.num_turns = size_x * size_y - num_bombs
-        self.true_map = torch.zeros([num_envs, size_x * size_y], dtype=torch.int8)
-        self.observed_map = torch.zeros([num_envs, size_x * size_y], dtype=torch.int8)
-        self.done = torch.zeros([num_envs], dtype=torch.bool)
+        self.true_map = torch.zeros([num_envs, size_x * size_y], dtype=torch.int8, device=device)
+        self.observed_map = torch.zeros([num_envs, size_x * size_y], dtype=torch.int8, device=device)
+        self.done = torch.zeros([num_envs], dtype=torch.bool, device=device)
         self.reset()
         self.step_number = 0
 
     def reset(self, env_ids=None):
         """Reset the given environments to an initial, newly randomized state."""
+        device = self.true_map.device
         if env_ids is None:
-            env_ids = torch.arange(self.num_envs)
+            env_ids = torch.arange(self.num_envs, device=device)
         num_envs = env_ids.shape[0]
 
         # Determine the locations of bombs/rupoors
-        bomb_ind = torch.multinomial(torch.ones([num_envs, self.size_x * self.size_y]),
+        bomb_ind = torch.multinomial(torch.ones([num_envs, self.size_x * self.size_y], device=device),
                                        num_samples=self.num_bombs + self.num_rupoors)
         bomb_x = bomb_ind % self.size_x
         bomb_y = bomb_ind // self.size_x
-        bomb_map = torch.zeros([num_envs, self.size_x, self.size_y], dtype=torch.int8)
+        bomb_map = torch.zeros([num_envs, self.size_x, self.size_y], dtype=torch.int8, device=device)
         bomb_map[torch.arange(num_envs).view(-1, 1), bomb_x, bomb_y] = 1
 
         # Determine the number of neighboring bombs/rupoors for each cell
-        cnt_map = F.conv2d(bomb_map.unsqueeze(1),
-                           weight=torch.ones([1, 1, 3, 3], dtype=torch.int8),
-                           padding=1).squeeze(1)
+        if env_ids.is_cuda:
+            cnt_map = F.conv2d(bomb_map.unsqueeze(1).to(torch.float16),
+                               weight=torch.ones([1, 1, 3, 3], dtype=torch.float16, device=device),
+                               padding=1).squeeze(1).to(torch.int8)
+        else:
+            cnt_map = F.conv2d(bomb_map.unsqueeze(1),
+                               weight=torch.ones([1, 1, 3, 3], dtype=torch.int8, device=device),
+                               padding=1).squeeze(1)
 
         # Update `bomb_map` to distinguish rupoors from bombs
         bomb_map[torch.arange(num_envs).view(-1, 1), bomb_x[:, :self.num_rupoors], bomb_y[:, :self.num_rupoors]] = 2
 
         # Create the "true" map
-        true_map = torch.full([num_envs, self.size_x, self.size_y], GREEN, dtype=torch.int8)
+        true_map = torch.full([num_envs, self.size_x, self.size_y], GREEN, dtype=torch.int8, device=device)
         true_map[(cnt_map == 1) | (cnt_map == 2)] = BLUE
         true_map[(cnt_map == 3) | (cnt_map == 4)] = RED
         true_map[(cnt_map == 5) | (cnt_map == 6)] = SILVER
@@ -85,11 +91,11 @@ class ThrillDiggerEnvironment:
         self.done |= hit_bomb | all_rupees_collected
 
         self.step_number += 1
-# torch.manual_seed(0)
-td = ThrillDiggerEnvironment(num_envs=2, size_x=5, size_y=4, num_rupoors=3, num_bombs=1)
-self = td
-env_ids = torch.arange(self.num_envs)
-# td.observed_map = td.true_map
-td.reward()
-action = torch.tensor([2, 4])
-td.step(action)
+# # torch.manual_seed(0)
+# td = ThrillDiggerEnvironment(num_envs=2, size_x=5, size_y=4, num_rupoors=3, num_bombs=1)
+# self = td
+# env_ids = torch.arange(self.num_envs)
+# # td.observed_map = td.true_map
+# td.reward()
+# action = torch.tensor([2, 4])
+# td.step(action)
